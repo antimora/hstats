@@ -24,6 +24,12 @@ pub fn main() {
     // Generate some random data
     let random_data: Vec<T> = (0..NUM_SAMPLES).map(|_x| normal.sample(&mut rng)).collect();
 
+    println!("Number of random samples: {}", random_data.len());
+    println!("Number of bins: {}", NUM_BINS);
+    println!("Start: {}", START);
+    println!("End: {}", END);
+
+    // Get the number of threads
     let thread_count = rayon::current_num_threads() * 2;
     println!("Thread count: {}", thread_count);
 

@@ -1,23 +1,23 @@
-# Hstats: Online Data Stream Statistics & Histograms
+# Hstats: Online Statistics and Histograms for Data Streams
 
-`hstats` is a high-performance, lightweight library designed for real-time statistical analysis and
-histogram generation from data streams. With a focus on multi-threaded environments, `hstats`
-enables the creation and merging of multiple `Hstats` instances, providing a statistical overview
-and histogram of the entire data stream.
+`hstats` is a streamlined and high-performance library engineered for online statistical analysis
+and histogram generation from data streams. With a focus on multi-threaded environments, `hstats`
+facilitates parallel operations that can later be merged into a single `Hstats` instance.
 
-When creating a histogram, the number and width of bins are pre-determined. The bin width is
-determined as (end - start)/nbins. Values within the range [start, end) are counted within the bins,
-while values outside this range are included in underflow and overflow bins, allowing for histogram
-range adjustments.
+During the histogram creation process, the number and width of bins are predetermined. The bin width
+is calculated using the formula (end - start)/nbins, based on the parameters provided by the user.
+Values that fall within the range of [start, end) are assigned to the appropriate bins, while values
+outside this range are counted in underflow and overflow bins, which allows for subsequent
+adjustments to the histogram's range.
 
-`hstats` leverages Welford's algorithm to calculate mean and standard deviation statistics,
-implemented through the [rolling-stats](https://github.com/ryankurte/rust-rolling-stats) library. It
-is compatible with [no_std environments](https://docs.rust-embedded.org/book/intro/no-std.html)
-supporting alloc.
+`hstats` utilizes Welford's algorithm via the
+[rolling-stats](https://github.com/ryankurte/rust-rolling-stats) library to compute mean and
+standard deviation statistics. The `hstats` library is compatible with
+[no_std environments](https://docs.rust-embedded.org/book/intro/no-std.html) that support alloc.
 
-For simple printing of statistics and histograms, the library implements `Display` for `Hstats`.
-Users can specify the floating-point precision (default precision is 2) of statistics to print and
-the character used for histogram bars (default is `░`).
+To simplify the output of statistics and histograms, `hstats` implements the `Display` trait for
+`Hstats`. This allows users to define the floating-point precision (default is 2) for the printed
+statistics and choose the character used for the histogram bars (default is `░`).
 
 ## Getting Started
 
@@ -44,6 +44,10 @@ hstats = "0.1.0"
 Here is a sample output from the multi-thread example:
 
 ```
+Number of random samples: 50000000
+Number of bins: 30
+Start: -8
+End: 10
 Thread count: 20
 Chunk size: 2500000
 Number of hstats to merge: 20
@@ -85,9 +89,9 @@ Start |  End
 Total Count: 50000000 Min: -14.19 Max: 18.04 Mean: 2.00 Std Dev: 3.00
 
 
-real    0m1.836s
-user    0m9.756s
-sys     0m0.099s
+real    0m1.905s
+user    0m9.727s
+sys     0m0.127s
 ```
 
 ## License
