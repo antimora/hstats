@@ -8,7 +8,7 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 
-use num_traits::{Float, FromPrimitive, One, Zero};
+use num_traits::{Float, FromPrimitive};
 use rolling_stats::Stats;
 
 const DEFAULT_BAR_CHAR: &str = "░";
@@ -17,8 +17,8 @@ const DEFAULT_PRECISION: usize = 2;
 /// `Hstats` is a struct for creating and managing histograms of data.
 ///
 /// The generic `T` refers to the type of the data this histogram manages.
-/// `T` must be a float type that implements Zero, One, AddAssign,
-/// FromPrimitive, PartialEq, Debug, and Display traits.
+/// `T` must be a float type that implements Float, AddAssign, FromPrimitive,
+///  Debug , Display
 ///
 /// The struct includes fields for managing the histogram bins, underflow,
 /// overflow, and other statistics.
@@ -227,7 +227,7 @@ where
 /// Display the histogram as a text-based histogram.
 impl<T> Display for Hstats<T>
 where
-    T: Float + Zero + One + AddAssign + FromPrimitive + PartialEq + Debug + Display,
+    T: Float + AddAssign + FromPrimitive + Debug + Display,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         const MAX_BAR_SIZE: usize = 60; // Maximum size of the histogram bar
