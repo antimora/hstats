@@ -1,5 +1,6 @@
 # Hstats: Online Statistics and Histograms for Data Streams
 
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/antimora/hstats/rust.yml)](https://github.com/antimora/hstats/actions)
 [![GitHub tag](https://img.shields.io/github/checks-status/antimora/hstats/main.svg)](https://github.com/antimora/hstats)
 [![Crates.io](https://img.shields.io/crates/v/hstats.svg)](https://crates.io/crates/hstats)
 [![Docs.rs](https://docs.rs/hstats/badge.svg)](https://docs.rs/hstats)
