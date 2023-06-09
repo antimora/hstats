@@ -4,6 +4,7 @@ authors = [
 ]
 categories = ["science"]
 description = "Online histogram statistics calculations"
+documentation = "https://docs.rs/hstats"
 edition = "2021"
 keywords = ["statistics", "stats", "histogram", "online", "rolling", "data"]
 license = "MIT OR Apache-2.0"

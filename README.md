@@ -1,5 +1,9 @@
 # Hstats: Online Statistics and Histograms for Data Streams
 
+[![GitHub tag](https://img.shields.io/github/checks-status/antimora/hstats/main.svg)](https://github.com/antimora/hstats)
+[![Crates.io](https://img.shields.io/crates/v/hstats.svg)](https://crates.io/crates/hstats)
+[![Docs.rs](https://docs.rs/hstats/badge.svg)](https://docs.rs/hstats)
+
 `hstats` is a streamlined and high-performance library engineered for online statistical analysis
 and histogram generation from data streams. With a focus on multi-threaded environments, `hstats`
 facilitates parallel operations that can later be merged into a single `Hstats` instance.
