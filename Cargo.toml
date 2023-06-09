@@ -6,17 +6,15 @@ categories = ["science"]
 description = "Online histogram statistics calculations"
 edition = "2021"
 keywords = ["statistics", "stats", "histogram", "online", "rolling", "data"]
-license = "MIT / Apache-2.0"
+license = "MIT OR Apache-2.0"
 name = "hstats"
 readme = "README.md"
 repository = "https://github.com/antimora/hstats"
 version = "0.1.0"
 
 [dependencies]
-libm = {version = "0.2.7", optional = true}
 num-traits = {version = "0.2.15", default-features = false, features = ["libm"]}
 rolling-stats = "0.7.0"
-# serde = {version = "1.0.163", features = ["derive"], optional = true, default-features = false}
 
 [dev-dependencies]
 float-cmp = "0.9.0"
