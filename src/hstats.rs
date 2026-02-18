@@ -4,6 +4,7 @@ use core::{
     ops::AddAssign,
 };
 
+use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -22,7 +23,7 @@ const DEFAULT_PRECISION: usize = 2;
 ///
 /// The struct includes fields for managing the histogram bins, underflow,
 /// overflow, and other statistics.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct Hstats<T>
 where
     T: Float + AddAssign + FromPrimitive + Debug + Display,
@@ -83,6 +84,10 @@ where
     ///
     /// * `value`: Value to be added to the histogram.
     pub fn add(&mut self, value: T) {
+        if value.is_nan() {
+            return;
+        }
+
         self.stats.update(value);
 
         if value < self.start {
@@ -117,17 +122,16 @@ where
         assert_eq!(self.bin_count, other.bin_count, "Bin counts must be equal");
 
         let mut merged = Hstats::new(self.start, self.end, self.bin_count);
+        merged.precision = self.precision;
+        merged.bar_char = self.bar_char.clone();
 
-        // Add the underflow and overflow together
         merged.underflow = self.underflow + other.underflow;
         merged.overflow = self.overflow + other.overflow;
 
-        // Add the bins together
         for (i, (left, right)) in (self.bins.iter().zip(other.bins.iter())).enumerate() {
             merged.bins[i] = *left + *right;
         }
 
-        // Merge the stats
         merged.stats = self.stats.merge(&other.stats);
 
         merged
@@ -242,44 +246,56 @@ where
     }
 }
 
+impl<T> Default for Hstats<T>
+where
+    T: Float + AddAssign + FromPrimitive + Debug + Display,
+{
+    fn default() -> Self {
+        Self::new(T::zero(), T::one(), 10)
+    }
+}
+
 /// Display the histogram as a text-based histogram.
 impl<T> Display for Hstats<T>
 where
     T: Float + AddAssign + FromPrimitive + Debug + Display,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        const MAX_BAR_SIZE: usize = 60; // Maximum size of the histogram bar
+        const MAX_BAR_SIZE: usize = 60;
 
-        // Find the bin with maximum count
         let max_count = *self.bins.iter().max().unwrap_or(&0);
+        let total_count = self.count();
+        let bins = self.bins();
 
-        // let col1_width = self.bins.iter().max_by_key(|(start, _, _)| *start).unwrap();
-
-        let col1 = self
-            .bins()
+        let col1 = bins
             .iter()
             .map(|(start, _, _)| format!("{:.*}", self.precision, start).len())
             .max()
-            .unwrap();
+            .unwrap_or(5);
 
-        let col2 = self
-            .bins()
+        let col2 = bins
             .iter()
             .map(|(_, end, _)| format!("{:.*}", self.precision, end).len())
             .max()
-            .unwrap();
+            .unwrap_or(5);
 
         let precision = self.precision;
 
         writeln!(f, "{:^col1$} | {:^col2$}", "Start", "End")?;
         writeln!(f, "{:-^col1$}-|-{:-^col2$}-", "", "")?;
-        for (range_start, range_end, count) in self.bins() {
-            // Calculate the length of the bar
-            let bar_length = ((count as f64 / max_count as f64) * MAX_BAR_SIZE as f64) as usize;
+        for (range_start, range_end, count) in &bins {
+            let bar_length = if max_count > 0 {
+                ((*count as f64 / max_count as f64) * MAX_BAR_SIZE as f64) as usize
+            } else {
+                0
+            };
 
-            let percent = count as f64 / self.count() as f64 * 100.0;
+            let percent = if total_count > 0 {
+                *count as f64 / total_count as f64 * 100.0
+            } else {
+                0.0
+            };
 
-            // Create the bar string with '#' characters
             let bar = self.bar_char.repeat(bar_length);
 
             writeln!(
@@ -288,7 +304,7 @@ where
             )?;
         }
         writeln!(f)?;
-        write!(f, "Total Count: {}", self.count())?;
+        write!(f, "Total Count: {}", total_count)?;
         write!(f, " Min: {:.*}", self.precision, self.min())?;
         write!(f, " Max: {:.*}", self.precision, self.max())?;
         write!(f, " Mean: {:.*}", self.precision, self.mean())?;
@@ -399,6 +415,48 @@ mod tests {
         let hstats2 = Hstats::new(0.0, 10.0, 11);
 
         let _ = hstats1.merge(&hstats2);
+    }
+
+    #[test]
+    fn test_default() {
+        let hstats: Hstats<f64> = Hstats::default();
+        assert_eq!(hstats.start(), 0.0);
+        assert_eq!(hstats.end(), 1.0);
+        assert_eq!(hstats.bin_count(), 10);
+        assert_eq!(hstats.count(), 0);
+    }
+
+    #[test]
+    fn test_add_nan() {
+        let mut hstats = Hstats::new(0.0, 10.0, 10);
+        hstats.add(5.0);
+        hstats.add(f64::NAN);
+        hstats.add(3.0);
+
+        assert_eq!(hstats.count(), 2);
+        assert_eq!(hstats.bins[5], 1);
+        assert_eq!(hstats.bins[3], 1);
+    }
+
+    #[test]
+    fn test_merge_preserves_settings() {
+        let mut h1 = Hstats::new(0.0, 10.0, 10)
+            .with_precision(4)
+            .with_bar_char("#");
+        h1.add(5.0);
+        let mut h2 = Hstats::new(0.0, 10.0, 10);
+        h2.add(6.0);
+
+        let merged = h1.merge(&h2);
+        assert_eq!(merged.precision, 4);
+        assert_eq!(merged.bar_char, "#");
+    }
+
+    #[test]
+    fn test_display_empty_histogram() {
+        let hstats = Hstats::new(0.0, 10.0, 5);
+        let output = format!("{}", hstats);
+        assert!(output.contains("Total Count: 0"));
     }
 
     #[test]
