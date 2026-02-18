@@ -186,6 +186,24 @@ where
         bins
     }
 
+    /// Returns the same bins as `bins`, but with cumulative counts for each bin.
+    ///
+    /// # Returns
+    ///
+    /// A vector of tuples. Each tuple has lower bound, upper bound and cumulative count for each bin.
+    pub fn bins_cumulative(&self) -> Vec<(T, T, u64)> {
+        let bins = self.bins();
+        let mut cumul_bins = Vec::<(T, T, u64)>::with_capacity(bins.len());
+
+        let mut aggregate = 0;
+        for (lower, upper, count) in bins {
+            aggregate += count;
+            cumul_bins.push((lower, upper, aggregate));
+        }
+
+        cumul_bins
+    }
+
     /// Maximum value seen so far.
     pub fn max(&self) -> T {
         self.stats.max
@@ -421,6 +439,20 @@ mod tests {
             hstats.bins.iter().copied().sum::<u64>() + hstats.underflow + hstats.overflow;
 
         assert_eq!(count_from_bins as usize, random_data.len());
+
+        let cumulative = hstats.bins_cumulative();
+
+        assert_eq!(hstats.bins().len(), cumulative.len());
+
+        // Check cumulative bins counts increase monotonically
+        let mut perv_cumul = u64::MIN;
+        for cbin in cumulative.iter() {
+            assert!(cbin.2 >= perv_cumul);
+            perv_cumul = cbin.2;
+        }
+
+        // Check last cumulative bin count is the actual count
+        assert_eq!(cumulative.last().unwrap().2 as usize, hstats.count());
 
         // Min, Max, Mean, and StdDev are tested by rolling-stats tests, so we don't need to test them here
     }
