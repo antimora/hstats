@@ -1,28 +1,22 @@
 # Hstats: Online Statistics and Histograms for Data Streams
 
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/antimora/hstats/rust.yml)](https://github.com/antimora/hstats/actions)
-[![GitHub tag](https://img.shields.io/github/checks-status/antimora/hstats/main.svg)](https://github.com/antimora/hstats)
 [![Crates.io](https://img.shields.io/crates/v/hstats.svg)](https://crates.io/crates/hstats)
 [![Docs.rs](https://docs.rs/hstats/badge.svg)](https://docs.rs/hstats)
 
-`hstats` is a streamlined and high-performance library engineered for online statistical analysis
-and histogram generation from data streams. With a focus on multi-threaded environments, `hstats`
-facilitates parallel operations that can later be merged into a single `Hstats` instance.
+A Rust library for computing histograms and statistics from data streams without loading entire
+datasets into memory. Designed for parallel workloads where independent histograms can be merged
+into a single result.
 
-During the histogram creation process, the number and width of bins are predetermined. The bin width
-is calculated using the formula (end - start)/nbins, based on the parameters provided by the user.
-Values that fall within the range of [start, end) are assigned to the appropriate bins, while values
-outside this range are counted in underflow and overflow bins, which allows for subsequent
-adjustments to the histogram's range.
+## Features
 
-`hstats` utilizes Welford's algorithm via the
-[rolling-stats](https://github.com/ryankurte/rust-rolling-stats) library to compute mean and
-standard deviation statistics. The `hstats` library is compatible with
-[no_std environments](https://docs.rust-embedded.org/book/intro/no-std.html) that support alloc.
-
-To simplify the output of statistics and histograms, `hstats` implements the `Display` trait for
-`Hstats`. This allows users to define the floating-point precision (default is 2) for the printed
-statistics and choose the character used for the histogram bars (default is `░`).
+- **Online computation** - processes values one at a time, constant memory usage
+- **Parallel-friendly** - build histograms per-thread, then `merge()` them
+- **Underflow/overflow tracking** - values outside `[start, end)` are counted separately
+- **Statistics** - min, max, mean, and standard deviation via Welford's algorithm
+  ([rolling-stats](https://github.com/ryankurte/rust-rolling-stats))
+- **`Display` trait** - configurable text-based histogram output with custom precision and bar characters
+- **`no_std` compatible** - works in `no_std` environments that support `alloc`
 
 ## Getting Started
 
@@ -33,20 +27,57 @@ Add the following to your `Cargo.toml`:
 hstats = "0.2.0"
 ```
 
+## Usage
+
+```rust
+use hstats::Hstats;
+
+// Create a histogram with 10 bins over the range [0.0, 100.0)
+let mut hist = Hstats::new(0.0, 100.0, 10);
+
+// Add values
+for value in &[15.0, 25.0, 35.5, 50.0, 72.0, 91.0] {
+    hist.add(*value);
+}
+
+// Query statistics
+println!("count: {}, mean: {:.2}, std_dev: {:.2}", hist.count(), hist.mean(), hist.std_dev());
+println!("min: {:.2}, max: {:.2}", hist.min(), hist.max());
+
+// Print the histogram
+println!("{}", hist.with_precision(1));
+```
+
+### Parallel usage
+
+Build histograms independently on each thread, then merge:
+
+```rust
+// On each thread:
+let mut local = Hstats::new(0.0, 100.0, 10);
+for value in chunk {
+    local.add(*value);
+}
+
+// After all threads finish, merge results:
+let combined = histograms.into_iter()
+    .reduce(|a, b| a.merge(&b))
+    .unwrap();
+```
+
+See [examples/single-thread.rs](examples/single-thread.rs) and
+[examples/multi-thread.rs](examples/multi-thread.rs) for complete runnable examples.
+
 ## Examples
 
-1. Single thread example: See [examples/single-thread.rs](examples/single-thread.rs) Run the example
-   with:
-   ```shell
-   time cargo run --example single-thread --release
-   ```
-2. Multi-thread example: See [examples/multi-thread.rs](examples/multi-thread.rs) Run the example
-   with:
-   ```shell
-   time cargo run --example multi-thread --release
-   ```
+Run the examples with:
 
-Here is a sample output from the multi-thread example:
+```shell
+cargo run --example single-thread --release
+cargo run --example multi-thread --release
+```
+
+Sample output from the multi-thread example:
 
 ```
 Number of random samples: 50000000
