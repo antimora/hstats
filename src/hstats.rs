@@ -1,4 +1,5 @@
 use core::fmt::{Error, Formatter};
+use core::num::NonZeroU64;
 use core::{
     fmt::{Debug, Display},
     ops::AddAssign,
@@ -206,6 +207,132 @@ where
         }
 
         cumul_bins
+    }
+
+    /// Shortcut to `bins_at_quantiles`, scaled to a 10,000 for myriatiles.
+    ///
+    /// Example:
+    /// ```
+    /// use hstats::Hstats;
+    ///
+    /// let mut hstats = Hstats::new(0.0, 10.0, 10);
+    /// hstats.add(5.0);
+    ///
+    /// assert_eq!(
+    ///     hstats.bins_at_myriatiles(&[0,5_000, 10_000]),
+    ///     hstats.bins_at_centiles(&[0, 50, 100])
+    /// );
+    ///
+    /// // Bin at 99.99% ( 9999 / 10_000 ):
+    /// assert_eq!(
+    ///     hstats.bins_at_myriatiles(&[9_999])[0],
+    ///     hstats.bins_cumulative()[6]
+    /// );
+    /// ```
+    pub fn bins_at_myriatiles(&self, myriatiles: &[u64]) -> Vec<(T, T, u64)> {
+        self.bins_at_quantiles(myriatiles, NonZeroU64::new(10_000).unwrap())
+    }
+
+    /// Shortcut to `bins_at_quantiles`, scaled to a 100 for percentiles.
+    ///
+    /// Example:
+    /// ```
+    /// use hstats::Hstats;
+    ///
+    /// let mut hstats = Hstats::new(0.0, 10.0, 10);
+    /// hstats.add(5.0);
+    ///
+    /// assert_eq!(hstats.bins_at_centiles(&[0])[0] , hstats.bins_cumulative()[0]);
+    /// assert_eq!(hstats.bins_at_centiles(&[50])[0] , hstats.bins_cumulative()[6]);
+    /// assert_eq!(hstats.bins_at_centiles(&[100])[0] , hstats.bins_cumulative()[6]);
+    /// ```
+    pub fn bins_at_centiles(&self, percentiles: &[u64]) -> Vec<(T, T, u64)> {
+        self.bins_at_quantiles(percentiles, NonZeroU64::new(100).unwrap())
+    }
+
+    ///  Shortcut to `bins_at_quantiles`, scaled to a 4 for quartiles.
+    ///
+    /// Example:
+    /// ```
+    /// use hstats::Hstats;
+    ///
+    /// let mut hstats = Hstats::new(0.0, 10.0, 10);
+    /// hstats.add(5.0);
+    ///
+    /// assert_eq!(hstats.bins_at_centiles(&[0])[0] , hstats.bins_at_quartiles(&[0])[0]);
+    /// assert_eq!(hstats.bins_at_centiles(&[50])[0] , hstats.bins_at_quartiles(&[2])[0]);
+    /// assert_eq!(hstats.bins_at_centiles(&[100])[0] , hstats.bins_at_quartiles(&[4])[0]);
+    /// ```
+    pub fn bins_at_quartiles(&self, quartiles: &[u64]) -> Vec<(T, T, u64)> {
+        self.bins_at_quantiles(quartiles, NonZeroU64::new(4).unwrap())
+    }
+
+    /// Returns the bins (potentially duplicated) covering the given quantile and scale.
+    ///
+    /// Percentiles values are clamped to be in [0,scale] (boundaries included)
+    ///
+    /// # Returns
+    ///
+    /// A vector of tuples. Each tuple has lower bound, upper bound and cumulative count for each bin and contains the given quantile/scale.
+    ///
+    /// Example:
+    /// ```
+    /// use hstats::Hstats;
+    /// use core::num::NonZeroU64;
+    ///
+    /// let mut hstats = Hstats::new(0.0, 10.0, 10);
+    /// hstats.add(5.0);
+    ///
+    /// // Get the 99.999% quantile bin:
+    /// assert_eq!(
+    ///     hstats.bins_at_quantiles(&[99_999], NonZeroU64::new(100_000).unwrap())[0],
+    ///     hstats.bins_cumulative()[6]
+    /// );
+    ///
+    /// ```
+    pub fn bins_at_quantiles(&self, quantiles: &[u64], scale: NonZeroU64) -> Vec<(T, T, u64)> {
+        // Compute the count boundaries and save the original indices/order for percentiles.
+        let mut quantiles_counts = {
+            let count = self.count();
+            quantiles
+                .iter()
+                .map(|&pc| {
+                    pc.clamp(0, scale.get())
+                        .saturating_mul(count as u64)
+                        .div_ceil(scale.get())
+                })
+                .enumerate()
+                .collect::<Vec<_>>()
+        };
+
+        // Sort by increasing value for the algorithm below.
+        quantiles_counts.sort_unstable_by_key(|&(_, v)| v);
+
+        let mut res = Vec::with_capacity(quantiles_counts.len());
+
+        let mut cumul_bins = self.bins_cumulative().into_iter().peekable();
+
+        for quantile_count in quantiles_counts {
+            // Is the stable next value still good for the percentile?
+            while let Some(&bin) = cumul_bins.peek() {
+                // Advance if the bin is not good.
+                if bin.2 < quantile_count.1 {
+                    cumul_bins.next();
+                } else {
+                    // Bin is good. save and stay put for the next count.
+                    res.push((quantile_count.0, bin));
+                    break;
+                }
+            }
+        }
+
+        // Reorder the bins by original percentiles order
+        res.sort_unstable_by_key(|&(idx, _)| idx);
+
+        // Bit of quality control.
+        assert_eq!(res.len(), quantiles.len());
+
+        res.into_iter().map(|(_, bin)| bin).collect()
     }
 
     /// Maximum value seen so far.
@@ -436,6 +563,14 @@ mod tests {
         assert_eq!(hstats.count(), 2);
         assert_eq!(hstats.bins[5], 1);
         assert_eq!(hstats.bins[3], 1);
+
+        // 33% percentile gives the first bin with non zero count.
+        let first_non_zero = hstats
+            .bins_cumulative()
+            .into_iter()
+            .find(|&bin| bin.2 >= 1)
+            .unwrap();
+        assert_eq!(hstats.bins_at_centiles(&[33])[0], first_non_zero);
     }
 
     #[test]
@@ -464,6 +599,7 @@ mod tests {
         type T = f64;
 
         // Define some constants
+        // Note that the random data mean is not centered on the middle of the START..END interval.
         const MEAN: T = 2.0;
         const STD_DEV: T = 3.0;
         const SEED: u64 = 42;
@@ -503,14 +639,48 @@ mod tests {
         assert_eq!(hstats.bins().len(), cumulative.len());
 
         // Check cumulative bins counts increase monotonically
-        let mut perv_cumul = u64::MIN;
+        let mut prev_cumul = u64::MIN;
         for cbin in cumulative.iter() {
-            assert!(cbin.2 >= perv_cumul);
-            perv_cumul = cbin.2;
+            assert!(cbin.2 >= prev_cumul);
+            prev_cumul = cbin.2;
         }
 
         // Check last cumulative bin count is the actual count
         assert_eq!(cumulative.last().unwrap().2 as usize, hstats.count());
+
+        // bins_at_percentiles
+        // 0 should give the first bin.
+        assert_eq!(hstats.bins_at_centiles(&[0])[0], cumulative[0]);
+        // 100 should give the last bin
+        assert_eq!(
+            &hstats.bins_at_centiles(&[100])[0],
+            cumulative.last().unwrap()
+        );
+
+        // Several times the same percentage should give several time
+        // the same bin, and the order of the requested percentiles is preserved.
+        assert_eq!(
+            &hstats.bins_at_centiles(&[100, 0, 100])[0],
+            cumulative.last().unwrap()
+        );
+        assert_eq!(hstats.bins_at_centiles(&[100, 0, 100])[1], cumulative[0]);
+        assert_eq!(
+            &hstats.bins_at_centiles(&[100, 0, 100])[2],
+            cumulative.last().unwrap()
+        );
+
+        // The bin 61 is at the 50th percentile.
+        // It is not the bin 50, because the mean of the random data
+        // is 2.0 , and not zero (bins range from -10.0 to +10.0)
+        assert_eq!(hstats.bins_at_centiles(&[50, 50])[0], cumulative[61]);
+        // The second value refers to the same bin
+        assert_eq!(hstats.bins_at_centiles(&[50, 50])[1], cumulative[61]);
+
+        // Check equivalence between centiles and quartiles
+        assert_eq!(
+            hstats.bins_at_centiles(&[0, 25, 50, 75, 100]),
+            hstats.bins_at_quartiles(&[0, 1, 2, 3, 4])
+        );
 
         // Min, Max, Mean, and StdDev are tested by rolling-stats tests, so we don't need to test them here
     }
