@@ -435,6 +435,18 @@ where
         write!(f, " Max: {:.*}", self.precision, self.max())?;
         write!(f, " Mean: {:.*}", self.precision, self.mean())?;
         writeln!(f, " Std Dev: {:.*}", self.precision, self.std_dev())?;
+
+        if total_count > 0 {
+            let pcts = self.bins_at_centiles(&[25, 50, 75, 90, 99]);
+            let labels = ["p25", "p50", "p75", "p90", "p99"];
+            writeln!(f, "Percentiles:")?;
+            let two = T::from(2.0).unwrap();
+            for (label, (lower, upper, _)) in labels.iter().zip(pcts.iter()) {
+                let midpoint = (*lower + *upper) / two;
+                writeln!(f, "  {label}: ~{:.*}", self.precision, midpoint)?;
+            }
+        }
+
         Ok(())
     }
 }
@@ -766,5 +778,14 @@ mod tests {
 
         // Check the count
         assert_eq!(merged.count(), random_data.len());
+
+        // Quantiles on merged histogram should match a single-thread histogram
+        let mut single = Hstats::new(START, END, NUM_BINS);
+        random_data.iter().for_each(|v| single.add(*v));
+
+        assert_eq!(
+            merged.bins_at_centiles(&[0, 25, 50, 75, 99, 100]),
+            single.bins_at_centiles(&[0, 25, 50, 75, 99, 100])
+        );
     }
 }
