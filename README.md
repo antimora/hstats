@@ -130,6 +130,7 @@ Start |  End
 10.00 |   inf | ░░ 191394 (0.38%)
 
 Total Count: 50000000 Min: -14.19 Max: 18.04 Mean: 2.00 Std Dev: 3.00
+
 Percentiles:
   p25: ~0.10
   p50: ~1.90

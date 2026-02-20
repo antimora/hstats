@@ -15,6 +15,7 @@ use rolling_stats::Stats;
 
 const DEFAULT_BAR_CHAR: &str = "░";
 const DEFAULT_PRECISION: usize = 2;
+const DEFAULT_DISPLAY_PERCENTILES: &[u64] = &[25, 50, 75, 90, 99];
 
 /// `Hstats` is a struct for creating and managing histograms of data.
 ///
@@ -39,6 +40,7 @@ where
     stats: Stats<T>,
     precision: usize,
     bar_char: String,
+    display_percentiles: Vec<u64>,
 }
 
 impl<T> Hstats<T>
@@ -76,6 +78,7 @@ where
             stats: Stats::new(),
             precision: DEFAULT_PRECISION,
             bar_char: DEFAULT_BAR_CHAR.to_string(),
+            display_percentiles: DEFAULT_DISPLAY_PERCENTILES.to_vec(),
         }
     }
 
@@ -125,6 +128,7 @@ where
         let mut merged = Hstats::new(self.start, self.end, self.bin_count);
         merged.precision = self.precision;
         merged.bar_char = self.bar_char.clone();
+        merged.display_percentiles = self.display_percentiles.clone();
 
         merged.underflow = self.underflow + other.underflow;
         merged.overflow = self.overflow + other.overflow;
@@ -359,15 +363,22 @@ where
         self.stats.count
     }
 
-    /// Modifies the precision of the histogram.
+    /// Modifies the decimal precision used in display output.
     pub fn with_precision(mut self, precision: usize) -> Self {
         self.precision = precision;
         self
     }
 
-    /// Modifies the character used to display the histogram bars.
+    /// Modifies the bar character used in display output.
     pub fn with_bar_char(mut self, bar_char: &str) -> Self {
         self.bar_char = bar_char.to_string();
+        self
+    }
+
+    /// Modifies the percentiles shown in display output.
+    /// Pass an empty slice to hide percentiles.
+    pub fn with_display_percentiles(mut self, percentiles: &[u64]) -> Self {
+        self.display_percentiles = percentiles.to_vec();
         self
     }
 }
@@ -435,15 +446,15 @@ where
         write!(f, " Max: {:.*}", self.precision, self.max())?;
         write!(f, " Mean: {:.*}", self.precision, self.mean())?;
         writeln!(f, " Std Dev: {:.*}", self.precision, self.std_dev())?;
+        writeln!(f)?;
 
-        if total_count > 0 {
-            let pcts = self.bins_at_centiles(&[25, 50, 75, 90, 99]);
-            let labels = ["p25", "p50", "p75", "p90", "p99"];
+        if total_count > 0 && !self.display_percentiles.is_empty() {
+            let pcts = self.bins_at_centiles(&self.display_percentiles);
             writeln!(f, "Percentiles:")?;
             let two = T::from(2.0).unwrap();
-            for (label, (lower, upper, _)) in labels.iter().zip(pcts.iter()) {
+            for (p, (lower, upper, _)) in self.display_percentiles.iter().zip(pcts.iter()) {
                 let midpoint = (*lower + *upper) / two;
-                writeln!(f, "  {label}: ~{:.*}", self.precision, midpoint)?;
+                writeln!(f, "  p{p}: ~{:.*}", self.precision, midpoint)?;
             }
         }
 
@@ -619,7 +630,8 @@ mod tests {
     fn test_merge_preserves_settings() {
         let mut h1 = Hstats::new(0.0, 10.0, 10)
             .with_precision(4)
-            .with_bar_char("#");
+            .with_bar_char("#")
+            .with_display_percentiles(&[50, 99]);
         h1.add(5.0);
         let mut h2 = Hstats::new(0.0, 10.0, 10);
         h2.add(6.0);
@@ -627,6 +639,7 @@ mod tests {
         let merged = h1.merge(&h2);
         assert_eq!(merged.precision, 4);
         assert_eq!(merged.bar_char, "#");
+        assert_eq!(merged.display_percentiles, vec![50, 99]);
     }
 
     #[test]
