@@ -25,7 +25,7 @@ Add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-hstats = "0.2.0"
+hstats = "0.3.0"
 ```
 
 ## Usage
