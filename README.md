@@ -13,6 +13,7 @@ into a single result.
 - **Online computation** - processes values one at a time, constant memory usage
 - **Parallel-friendly** - build histograms per-thread, then `merge()` them
 - **Underflow/overflow tracking** - values outside `[start, end)` are counted separately
+- **Quantile queries** - `bins_at_centiles`, `bins_at_quartiles`, `bins_at_myriatiles`, or custom scales via `bins_at_quantiles`
 - **Statistics** - min, max, mean, and standard deviation via Welford's algorithm
   ([rolling-stats](https://github.com/ryankurte/rust-rolling-stats))
 - **`Display` trait** - configurable text-based histogram output with custom precision and bar characters
@@ -46,6 +47,12 @@ println!("min: {:.2}, max: {:.2}", hist.min(), hist.max());
 
 // Print the histogram
 println!("{}", hist.with_precision(1));
+
+// Query percentile bins (p50, p90, p99)
+let percentiles = hist.bins_at_centiles(&[50, 90, 99]);
+for (lower, upper, cumul_count) in &percentiles {
+    println!("[{lower}, {upper}) cumulative: {cumul_count}");
+}
 ```
 
 ### Parallel usage
@@ -123,6 +130,12 @@ Start |  End
 10.00 |   inf | ░░ 191394 (0.38%)
 
 Total Count: 50000000 Min: -14.19 Max: 18.04 Mean: 2.00 Std Dev: 3.00
+Percentiles:
+  p25: ~0.10
+  p50: ~1.90
+  p75: ~4.30
+  p90: ~6.10
+  p99: ~9.10
 
 
 real    0m1.905s

@@ -250,7 +250,7 @@ where
         self.bins_at_quantiles(percentiles, NonZeroU64::new(100).unwrap())
     }
 
-    ///  Shortcut to `bins_at_quantiles`, scaled to a 4 for quartiles.
+    /// Shortcut to `bins_at_quantiles`, scaled to a 4 for quartiles.
     ///
     /// Example:
     /// ```
@@ -269,7 +269,7 @@ where
 
     /// Returns the bins (potentially duplicated) covering the given quantile and scale.
     ///
-    /// Percentiles values are clamped to be in [0,scale] (boundaries included)
+    /// Quantile values are clamped to be in [0,scale] (boundaries included)
     ///
     /// # Returns
     ///
@@ -291,7 +291,7 @@ where
     ///
     /// ```
     pub fn bins_at_quantiles(&self, quantiles: &[u64], scale: NonZeroU64) -> Vec<(T, T, u64)> {
-        // Compute the count boundaries and save the original indices/order for percentiles.
+        // Compute the count boundaries and save the original indices/order for quantiles.
         let mut quantiles_counts = {
             let count = self.count();
             quantiles
@@ -326,11 +326,10 @@ where
             }
         }
 
-        // Reorder the bins by original percentiles order
+        // Reorder the bins by original quantiles order
         res.sort_unstable_by_key(|&(idx, _)| idx);
 
-        // Bit of quality control.
-        assert_eq!(res.len(), quantiles.len());
+        debug_assert_eq!(res.len(), quantiles.len());
 
         res.into_iter().map(|(_, bin)| bin).collect()
     }
@@ -436,6 +435,18 @@ where
         write!(f, " Max: {:.*}", self.precision, self.max())?;
         write!(f, " Mean: {:.*}", self.precision, self.mean())?;
         writeln!(f, " Std Dev: {:.*}", self.precision, self.std_dev())?;
+
+        if total_count > 0 {
+            let pcts = self.bins_at_centiles(&[25, 50, 75, 90, 99]);
+            let labels = ["p25", "p50", "p75", "p90", "p99"];
+            writeln!(f, "Percentiles:")?;
+            let two = T::from(2.0).unwrap();
+            for (label, (lower, upper, _)) in labels.iter().zip(pcts.iter()) {
+                let midpoint = (*lower + *upper) / two;
+                writeln!(f, "  {label}: ~{:.*}", self.precision, midpoint)?;
+            }
+        }
+
         Ok(())
     }
 }
@@ -571,6 +582,37 @@ mod tests {
             .find(|&bin| bin.2 >= 1)
             .unwrap();
         assert_eq!(hstats.bins_at_centiles(&[33])[0], first_non_zero);
+    }
+
+    #[test]
+    fn test_quantiles_empty_histogram() {
+        let hstats = Hstats::new(0.0, 10.0, 10);
+        let cumulative = hstats.bins_cumulative();
+
+        assert_eq!(hstats.bins_at_centiles(&[0])[0], cumulative[0]);
+        assert_eq!(
+            hstats.bins_at_centiles(&[50, 100]),
+            vec![cumulative[0], cumulative[0]]
+        );
+    }
+
+    #[test]
+    fn test_quantiles_single_element() {
+        let mut hstats = Hstats::new(0.0, 10.0, 10);
+        hstats.add(5.0);
+        let cumulative = hstats.bins_cumulative();
+
+        // Bin 6 in cumulative (underflow + bins 0..=5) contains the element
+        let bin_with_element = cumulative[6];
+        assert_eq!(bin_with_element.2, 1);
+
+        // All non-zero percentiles should resolve to the bin containing the element
+        assert_eq!(hstats.bins_at_centiles(&[1])[0], bin_with_element);
+        assert_eq!(hstats.bins_at_centiles(&[50])[0], bin_with_element);
+        assert_eq!(hstats.bins_at_centiles(&[100])[0], bin_with_element);
+
+        // 0th percentile returns the first bin (underflow, count 0)
+        assert_eq!(hstats.bins_at_centiles(&[0])[0], cumulative[0]);
     }
 
     #[test]
@@ -736,5 +778,14 @@ mod tests {
 
         // Check the count
         assert_eq!(merged.count(), random_data.len());
+
+        // Quantiles on merged histogram should match a single-thread histogram
+        let mut single = Hstats::new(START, END, NUM_BINS);
+        random_data.iter().for_each(|v| single.add(*v));
+
+        assert_eq!(
+            merged.bins_at_centiles(&[0, 25, 50, 75, 99, 100]),
+            single.bins_at_centiles(&[0, 25, 50, 75, 99, 100])
+        );
     }
 }
